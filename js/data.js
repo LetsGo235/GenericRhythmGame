@@ -52,6 +52,7 @@
     defaultProfile: {
       settings: { volume: 0.78, offset: 0, reducedMotion: false, hitSounds: true },
       scores: {},
+      favorites: [],
       plays: 0,
       totalHits: 0,
       perfects: 0,

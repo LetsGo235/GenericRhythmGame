@@ -19,6 +19,7 @@
     previous: "title",
     songs: [],
     selectedSong: 0,
+    songCategory: 0,
     selectedMode: 0,
     profile: JSON.parse(JSON.stringify(Data.defaultProfile)),
     buttons: [],
@@ -39,7 +40,18 @@
     game: null,
     result: null,
     textField: null,
-    reducedMotion: false
+    reducedMotion: false,
+    lastSongWheel: 0
+  };
+
+  const UI = {
+    pink: "#ff006e",
+    pinkHot: "#ff2da1",
+    cyan: "#58e8ff",
+    navy: "#07101c",
+    ink: "#03070d",
+    line: "#263849",
+    muted: "#8b9caf"
   };
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -69,25 +81,23 @@
     ctx.closePath();
   }
   function panel(x, y, w, h, alpha, radius) {
-    ctx.fillStyle = `rgba(18,22,48,${alpha == null ? 0.82 : alpha})`;
-    rounded(x, y, w, h, radius || 22);
+    ctx.fillStyle = `rgba(7,16,28,${alpha == null ? 0.9 : alpha})`;
+    rounded(x, y, w, h, radius == null ? 8 : radius);
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.085)";
+    ctx.strokeStyle = "rgba(94,144,177,.24)";
     ctx.lineWidth = 1;
     ctx.stroke();
   }
   function text(value, x, y, size, color, align, weight) {
-    ctx.font = `${weight || 600} ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
+    const fontWeight = clamp(Math.round((Number(weight) || 600) / 100) * 100, 100, 900);
+    ctx.font = `${fontWeight} ${size}px Arial, sans-serif`;
     ctx.textAlign = align || "left";
     ctx.textBaseline = "middle";
     ctx.fillStyle = color || "#f7f8ff";
     ctx.fillText(String(value), x, y);
   }
   function smallCaps(value, x, y, color, align) {
-    ctx.save();
-    ctx.letterSpacing = "2px";
     text(String(value).toUpperCase(), x, y, 12, color || "#9ca6ca", align, 800);
-    ctx.restore();
   }
   function line(x1, y1, x2, y2, color, width) {
     ctx.strokeStyle = color;
@@ -115,26 +125,34 @@
   }
 
   function background(accentA, accentB) {
-    accentA = accentA || "#6cf2ff";
-    accentB = accentB || "#7058ff";
-    ctx.fillStyle = "#090b18";
+    accentA = accentA || UI.cyan;
+    accentB = accentB || UI.pink;
+    ctx.fillStyle = UI.ink;
     ctx.fillRect(0, 0, W, H);
-    const g1 = ctx.createRadialGradient(1040, 80, 0, 1040, 80, 600);
-    g1.addColorStop(0, rgba(accentB, 0.18));
-    g1.addColorStop(1, "rgba(9,11,24,0)");
+    const g1 = ctx.createRadialGradient(1060, 100, 0, 1060, 100, 720);
+    g1.addColorStop(0, rgba(accentB, 0.12));
+    g1.addColorStop(1, "rgba(3,7,13,0)");
     ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H);
-    const g2 = ctx.createRadialGradient(120, 700, 0, 120, 700, 520);
-    g2.addColorStop(0, rgba(accentA, 0.13));
-    g2.addColorStop(1, "rgba(9,11,24,0)");
+    const g2 = ctx.createRadialGradient(190, 720, 0, 190, 720, 640);
+    g2.addColorStop(0, rgba(accentA, 0.085));
+    g2.addColorStop(1, "rgba(3,7,13,0)");
     ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
 
     ctx.save();
-    ctx.globalAlpha = 0.1;
-    ctx.strokeStyle = "#b9c0eb";
-    ctx.lineWidth = 1;
-    const drift = app.reducedMotion ? 0 : (app.time * 8) % 64;
-    for (let x = -64 + drift; x < W + 64; x += 64) line(x, 0, x - 180, H, "rgba(185,192,235,.12)", 1);
-    for (let y = 40; y < H; y += 64) line(0, y, W, y, "rgba(185,192,235,.08)", 1);
+    const drift = app.reducedMotion ? 0 : (app.time * 3) % 96;
+    for (let x = -160 + drift; x < W + 160; x += 96) line(x, 0, x - 260, H, "rgba(73,110,137,.10)", 1);
+    for (let y = 56; y < H; y += 88) line(0, y, W, y, "rgba(67,103,128,.055)", 1);
+    for (let i = 0; i < 42; i++) {
+      const sx = (i * 197 + 31) % W;
+      const sy = (i * 83 + 19) % H;
+      const twinkle = app.reducedMotion ? 0.45 : 0.28 + Math.sin(app.time * 1.8 + i) * 0.18;
+      ctx.fillStyle = `rgba(180,226,255,${twinkle})`;
+      ctx.fillRect(sx, sy, i % 7 === 0 ? 2 : 1, i % 7 === 0 ? 2 : 1);
+    }
+    ctx.fillStyle = UI.pink;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(36, 0); ctx.lineTo(0, 38); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath(); ctx.moveTo(W - 26, H); ctx.lineTo(W, H - 26); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
     ctx.restore();
   }
 
@@ -142,14 +160,14 @@
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(app.reducedMotion ? -0.15 : -0.15 + Math.sin(app.time * 0.8) * 0.03);
-    ctx.strokeStyle = "#6cf2ff";
+    ctx.strokeStyle = UI.cyan;
     ctx.lineWidth = size * 0.08;
-    ctx.shadowColor = "#6cf2ff";
+    ctx.shadowColor = UI.cyan;
     ctx.shadowBlur = 18;
     ctx.beginPath();
     ctx.arc(0, 0, size * 0.42, -2.4, 0.8);
     ctx.stroke();
-    ctx.strokeStyle = "#ff4fbb";
+    ctx.strokeStyle = UI.pink;
     ctx.beginPath();
     ctx.arc(0, 0, size * 0.26, 0.75, 4.05);
     ctx.stroke();
@@ -159,6 +177,21 @@
   }
 
   function beginUI() { app.buttons = []; }
+  function hitRegion(x, y, w, h, action, disabled) {
+    const index = app.buttons.length;
+    const region = { x, y, w, h, action, disabled: !!disabled, index };
+    app.buttons.push(region);
+    return region;
+  }
+  function slantPath(x, y, w, h, slant) {
+    slant = slant == null ? 14 : slant;
+    ctx.beginPath();
+    ctx.moveTo(x + slant, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w - slant, y + h);
+    ctx.lineTo(x, y + h);
+    ctx.closePath();
+  }
   function button(label, x, y, w, h, action, options) {
     options = options || {};
     const index = app.buttons.length;
@@ -167,12 +200,12 @@
     const hover = !r.disabled && (pointIn(app.pointer.x, app.pointer.y, r) || app.focus === index);
     ctx.save();
     if (options.accent) {
-      ctx.fillStyle = hover ? gradient(options.a || "#6cf2ff", options.b || "#7058ff", x, y, w, h) : rgba(options.a || "#6cf2ff", 0.15);
+      ctx.fillStyle = hover ? gradient(options.a || UI.pink, options.b || UI.pinkHot, x, y, w, h) : rgba(options.a || UI.pink, 0.18);
     } else {
       ctx.fillStyle = hover ? "rgba(255,255,255,.13)" : "rgba(255,255,255,.055)";
     }
     rounded(x, y, w, h, options.radius || 14); ctx.fill();
-    ctx.strokeStyle = hover ? (options.a || "rgba(108,242,255,.7)") : "rgba(255,255,255,.09)";
+    ctx.strokeStyle = hover ? (options.a || UI.cyan) : "rgba(94,144,177,.22)";
     ctx.lineWidth = hover ? 2 : 1; ctx.stroke();
     if (r.disabled) ctx.globalAlpha = 0.35;
     if (options.icon) text(options.icon, x + 25, y + h / 2, 18, options.color || "#fff", "center", 800);
@@ -186,11 +219,11 @@
     drawLogo(48, 42, 48);
     text(title, 86, 35, 22, "#fff", "left", 900);
     text(subtitle || "", 86, 58, 12, "#8f99bf", "left", 600);
-    if (backAction) button("BACK", 1110, 24, 130, 44, backAction, { icon: "←", hint: "ESC" });
+    if (backAction) button("BACK", 1110, 24, 130, 44, backAction, { icon: "←", hint: "ESC", a: UI.cyan });
   }
 
   function toast(message, color) {
-    app.toast = { message, color: color || "#6cf2ff", until: app.time + 2.7 };
+    app.toast = { message, color: color || UI.cyan, until: app.time + 2.7 };
   }
 
   function drawToast() {
@@ -219,7 +252,6 @@
 
   function cover(song, x, y, w, h) {
     ctx.save();
-    rounded(x, y, w, h, Math.min(24, w * 0.08)); ctx.clip();
     if (song && (song.coverBlob || song.coverUrl)) {
       let img = app.coverCache.get(song.id);
       if (!img) {
@@ -229,21 +261,33 @@
         app.coverCache.set(song.id, img);
       }
       if (img.complete && img.naturalWidth) {
-        const s = Math.max(w / img.naturalWidth, h / img.naturalHeight);
-        const iw = img.naturalWidth * s, ih = img.naturalHeight * s;
-        ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+        const sourceRatio = img.naturalWidth / img.naturalHeight;
+        const targetRatio = w / h;
+        let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
+        if (sourceRatio > targetRatio) {
+          sw = img.naturalHeight * targetRatio;
+          sx = (img.naturalWidth - sw) / 2;
+        } else {
+          sh = img.naturalWidth / targetRatio;
+          sy = (img.naturalHeight - sh) / 2;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
       }
     } else {
-      ctx.fillStyle = gradient(song ? song.colorA : "#6cf2ff", song ? song.colorB : "#7058ff", x, y, w, h);
-      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = gradient(song ? song.colorA : UI.cyan, song ? song.colorB : UI.pink, x, y, w, h);
+      rounded(x, y, w, h, Math.min(18, h * 0.12)); ctx.fill();
       ctx.globalAlpha = 0.2;
       for (let i = 0; i < 7; i++) {
         ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(x + w * 0.5, y + h * 0.5, w * (0.12 + i * 0.09), 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x + w * 0.5, y + h * 0.5, Math.min(w, h) * (0.12 + i * 0.055), 0, TAU); ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      text((song ? song.title : "?").charAt(0).toUpperCase(), x + w / 2, y + h / 2, w * 0.33, "rgba(255,255,255,.92)", "center", 950);
+      text((song ? song.title : "?").charAt(0).toUpperCase(), x + w / 2, y + h / 2, Math.min(w, h) * 0.42, "rgba(255,255,255,.92)", "center", 950);
     }
+    rounded(x, y, w, h, Math.min(18, h * 0.12));
+    ctx.strokeStyle = "rgba(180,226,255,.25)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -263,13 +307,14 @@
       app.profile = Object.assign({}, Data.defaultProfile, saved);
       app.profile.settings = Object.assign({}, Data.defaultProfile.settings, saved.settings || {});
       app.profile.scores = saved.scores || {};
+      app.profile.favorites = saved.favorites || [];
     }
     app.reducedMotion = app.profile.settings.reducedMotion;
     Audio.setVolume(app.profile.settings.volume);
     const custom = await Store.listSongs();
     const external = (window.PulseExternalSongs || []).map((song, i) => Object.assign({
       id: "file-song-" + i, artist: "Unknown Artist", bpm: 120, difficulty: 2,
-      colorA: "#6cf2ff", colorB: "#7058ff", beats: [], duration: 0,
+      colorA: UI.cyan, colorB: UI.pink, beats: [], duration: 0,
       fileBased: true, createdAt: 10 + i
     }, song));
     app.songs = Data.demoSongs.concat(external, custom.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
@@ -283,7 +328,7 @@
   }
 
   function drawTitle() {
-    background("#6cf2ff", "#ff4fbb");
+    background(UI.cyan, UI.pink);
     drawLogo(W / 2, 205, 150);
     text("PULSE//SPACE", W / 2, 325, 62, "#fff", "center", 950);
     text("A ONE-BUTTON RHYTHM PLAYGROUND", W / 2, 374, 14, "#aeb7d9", "center", 800);
@@ -305,11 +350,11 @@
       ["SETTINGS", "⚙", () => setScreen("settings", "main")],
       ["HOW TO PLAY", "?", () => setScreen("help", "main")]
     ];
-    menu.forEach((m, i) => button(m[0], 92, 218 + i * 62, 330, 48, m[2], { icon: m[1], accent: i === 0, a: "#6cf2ff", b: "#7058ff" }));
+    menu.forEach((m, i) => button(m[0], 92, 218 + i * 62, 330, 48, m[2], { icon: m[1], accent: i === 0, a: UI.pink, b: UI.pinkHot }));
 
     const song = app.songs[(Math.floor(app.time / 5)) % app.songs.length];
     panel(540, 106, 636, 504, 0.72, 30);
-    smallCaps("FEATURED PULSE", 588, 148, "#6cf2ff");
+    smallCaps("FEATURED PULSE", 588, 148, UI.cyan);
     cover(song, 588, 184, 236, 236);
     text(song.title, 858, 211, 30, "#fff", "left", 900);
     text(song.artist, 858, 247, 15, "#aeb7d9", "left", 650);
@@ -324,41 +369,280 @@
     text("No framework. No web UI components.", 858, 527, 13, "#8f99bf", "left", 600);
   }
 
-  function drawSongSelect() {
-    const song = selectedSong();
-    background(song.colorA, song.colorB); beginUI();
-    topBar("SELECT A SONG", `${app.songs.length} tracks available`, () => setScreen("main"));
+  const SONG_CATEGORIES = [
+    { id: "all", label: "ALL", icon: "▦" },
+    { id: "favorite", label: "FAVORITE", icon: "★" },
+    { id: "original", label: "ORIGINAL", icon: "♫" },
+    { id: "artist", label: "ARTIST", icon: "●" },
+    { id: "pack", label: "PACK", icon: "▰" }
+  ];
 
-    const start = clamp(app.selectedSong - 2, 0, Math.max(0, app.songs.length - 5));
-    for (let i = 0; i < Math.min(5, app.songs.length); i++) {
-      const idx = start + i;
-      const s = app.songs[idx];
-      const active = idx === app.selectedSong;
-      const y = 116 + i * 100;
-      const action = () => { app.selectedSong = idx; app.focus = i + 1; };
-      const r = button("", 54, y, 510, 84, action, { accent: active, a: s.colorA, b: s.colorB });
-      cover(s, r.x + 10, r.y + 10, 64, 64);
-      text(truncate(s.title, 28), 94 + 54, y + 29, 19, "#fff", "left", 850);
-      text(truncate(s.artist, 32), 148, y + 55, 12, "#9ca6ca", "left", 600);
-      text(formatTime(s.duration), 538, y + 28, 13, "#cbd1ea", "right", 750);
-      text("◆".repeat(s.difficulty || 1), 538, y + 55, 10, s.colorA, "right", 800);
+  function visibleSongs() {
+    const category = SONG_CATEGORIES[app.songCategory] || SONG_CATEGORIES[0];
+    let songs = app.songs.slice();
+    if (category.id === "favorite") songs = songs.filter(song => app.profile.favorites.includes(song.id));
+    else if (category.id === "original") songs = songs.filter(song => song.builtin);
+    else if (category.id === "pack") songs = songs.filter(song => !song.builtin);
+    else if (category.id === "artist") songs.sort((a, b) => (a.artist || "").localeCompare(b.artist || "") || a.title.localeCompare(b.title));
+    return songs;
+  }
+
+  function setSongCategory(index) {
+    app.songCategory = clamp(index, 0, SONG_CATEGORIES.length - 1);
+    const songs = visibleSongs();
+    if (songs.length && !songs.includes(selectedSong())) app.selectedSong = app.songs.indexOf(songs[0]);
+    Audio.stop();
+  }
+
+  function toggleFavorite(song) {
+    if (!song) return;
+    const favorites = app.profile.favorites;
+    const index = favorites.indexOf(song.id);
+    if (index >= 0) {
+      favorites.splice(index, 1);
+      toast("Removed from favorites", UI.muted);
+      if (SONG_CATEGORIES[app.songCategory].id === "favorite") {
+        const remaining = visibleSongs();
+        if (remaining.length) app.selectedSong = app.songs.indexOf(remaining[Math.min(index, remaining.length - 1)]);
+      }
+    } else {
+      favorites.push(song.id);
+      toast("Added to favorites", UI.pinkHot);
+    }
+    saveProfile();
+  }
+
+  function bestForSong(song) {
+    let best = null;
+    for (const [key, score] of Object.entries(app.profile.scores)) {
+      if (key.startsWith(song.id + ":") && (!best || score.score > best.score)) best = score;
+    }
+    return best;
+  }
+
+  function gradeColor(value) {
+    if (value === "S+" || value === "S") return "#66e9ff";
+    if (value === "A") return "#ffd45c";
+    if (value === "B") return "#77ee91";
+    if (value === "C") return "#ff9b5c";
+    return "#627181";
+  }
+
+  function difficultyRating(song) {
+    const density = song.duration ? song.beats.length / song.duration : 0;
+    return clamp(Math.round((song.difficulty || 1) * 2.1 + density * 1.8), 1, 15);
+  }
+
+  function drawSongSelectHeader(song, count) {
+    ctx.fillStyle = "rgba(2,7,13,.94)";
+    ctx.fillRect(0, 0, W, 92);
+    line(0, 91, W, 91, "rgba(121,192,226,.65)", 1);
+    ctx.fillStyle = UI.pink;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(30, 0); ctx.lineTo(0, 34); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(258, 0); ctx.lineTo(282, 0); ctx.lineTo(246, 92); ctx.lineTo(232, 92); ctx.closePath(); ctx.fill();
+
+    drawLogo(38, 41, 50);
+    text("PULSE", 78, 27, 27, "#f7f9ff", "left", 950);
+    text("SPACE", 128, 54, 25, UI.pink, "left", 950);
+    smallCaps("SONG  SELECT", 78, 76, "#dce8ef");
+
+    SONG_CATEGORIES.forEach((category, index) => {
+      const x = 283 + index * 136;
+      const y = 48;
+      const w = 140;
+      const h = 37;
+      const active = app.songCategory === index;
+      const region = { x, y, w, h };
+      const hover = pointIn(app.pointer.x, app.pointer.y, region);
+      slantPath(x, y, w, h, 15);
+      ctx.fillStyle = active ? UI.pink : hover ? "rgba(43,62,78,.86)" : "rgba(5,12,20,.92)";
+      ctx.fill();
+      ctx.strokeStyle = active ? "#ff6eb2" : "rgba(88,130,158,.4)";
+      ctx.lineWidth = 1; ctx.stroke();
+      text(category.icon, x + 30, y + h / 2, 15, active ? "#fff" : "#d7e3ec", "center", 850);
+      smallCaps(category.label, x + 52, y + h / 2, active ? "#fff" : "#b9c8d3");
+      hitRegion(x, y, w, h, () => setSongCategory(index));
+    });
+
+    const level = Math.max(1, Math.floor((app.profile.totalHits || 0) / 100) + 1);
+    const scores = Object.values(app.profile.scores);
+    const rating = scores.length ? scores.reduce((sum, score) => sum + (score.accuracy || 0), 0) / scores.length / 6.4 : 0;
+    smallCaps("LV.", 1071, 24, "#d8e4eb");
+    text(String(level).padStart(3, "0"), 1104, 24, 20, "#fff", "left", 900);
+    ctx.fillStyle = "rgba(255,255,255,.08)"; slantPath(1068, 45, 132, 7, 3); ctx.fill();
+    ctx.fillStyle = UI.pink; slantPath(1068, 45, 132 * clamp(((app.profile.totalHits || 0) % 100) / 100, .08, 1), 7, 3); ctx.fill();
+    smallCaps("RATING", 1096, 70, "#a8b9c6", "right");
+    text(rating.toFixed(2), 1189, 70, 13, "#f7f9ff", "right", 800);
+    ctx.strokeStyle = UI.cyan; ctx.lineWidth = 1.5;
+    rounded(1211, 14, 48, 48, 8); ctx.stroke();
+    cover(song, 1216, 19, 38, 38);
+    text(`${count} TRACK${count === 1 ? "" : "S"}`, 1188, 86, 9, "#647b8e", "right", 750);
+  }
+
+  function drawSongSelectFooter(song) {
+    ctx.fillStyle = "rgba(2,7,13,.96)";
+    ctx.fillRect(0, 680, W, 40);
+    line(0, 680, W, 680, "rgba(92,137,164,.45)", 1);
+    ctx.fillStyle = "rgba(255,255,255,.92)"; rounded(36, 691, 26, 19, 3); ctx.fill();
+    text("ESC", 49, 701, 9, "#07101c", "center", 900);
+    smallCaps("BACK", 74, 701, "#9eb0bd");
+    text("▲▼", 157, 701, 13, "#eaf3f8", "left", 850);
+    smallCaps("SELECT / WHEEL", 194, 701, "#9eb0bd");
+    ctx.fillStyle = "rgba(255,255,255,.92)"; rounded(350, 691, 22, 19, 3); ctx.fill();
+    text("Z", 361, 701, 10, "#07101c", "center", 900);
+    smallCaps("FAVORITE", 383, 701, "#9eb0bd");
+    ctx.fillStyle = "rgba(255,255,255,.92)"; rounded(485, 691, 22, 19, 3); ctx.fill();
+    text("P", 496, 701, 10, "#07101c", "center", 900);
+    smallCaps("PREVIEW", 518, 701, "#9eb0bd");
+    hitRegion(28, 684, 112, 32, () => setScreen("main"));
+    hitRegion(340, 684, 126, 32, () => toggleFavorite(song), !song);
+    hitRegion(478, 684, 120, 32, () => togglePreview(song), !song);
+  }
+
+  function drawSongSelect() {
+    const list = visibleSongs();
+    if (list.length && !list.includes(selectedSong())) app.selectedSong = app.songs.indexOf(list[0]);
+    const song = list.length ? selectedSong() : null;
+    background(song ? song.colorA : UI.cyan, UI.pink); beginUI();
+    drawSongSelectHeader(song || app.songs[0], list.length);
+
+    ctx.fillStyle = "rgba(2,7,13,.70)";
+    ctx.fillRect(0, 93, 611, 587);
+    line(610, 93, 610, 680, "rgba(81,141,177,.45)", 1);
+    ctx.fillStyle = UI.pink;
+    ctx.beginPath(); ctx.moveTo(0, 94); ctx.lineTo(46, 94); ctx.lineTo(0, 148); ctx.closePath(); ctx.fill();
+
+    if (!song) {
+      smallCaps("NO SONGS IN THIS CATEGORY", 304, 306, "#d8e3ea", "center");
+      text("Press Z on any song to add it to Favorites.", 304, 342, 13, "#6f8799", "center", 600);
+      panel(646, 116, 574, 486, 0.82, 5);
+      text("EMPTY CHANNEL", 933, 330, 27, "#334757", "center", 900);
+      drawSongSelectFooter(null);
+      return;
     }
 
-    panel(620, 116, 606, 504, 0.79, 28);
-    cover(song, 654, 150, 240, 240);
-    smallCaps(song.builtin ? "BUILT-IN TRACK" : song.fileBased ? "FILE TRACK" : "CUSTOM TRACK", 930, 157, song.colorA);
-    text(truncate(song.title, 22), 930, 195, 29, "#fff", "left", 900);
-    text(truncate(song.artist, 26), 930, 227, 14, "#aeb7d9", "left", 650);
-    stat("BPM", song.bpm || "—", 930, 276);
-    stat("BEATS", song.beats.length, 1056, 276);
-    stat("LENGTH", formatTime(song.duration), 1155, 276);
-    const best = app.profile.scores[song.id + ":" + selectedMode().id];
-    line(930, 342, 1187, 342, "rgba(255,255,255,.1)");
-    smallCaps("BEST CLEAR • " + selectedMode().name, 930, 370);
-    text(grade(best), 930, 411, 42, best ? song.colorA : "#59617f", "left", 950);
-    text(best ? `${formatNumber(best.score)}  •  ${best.accuracy.toFixed(1)}%` : "NO SCORE YET", 1000, 411, 14, "#cbd1ea", "left", 750);
-    button("CHOOSE MODE", 654, 528, 532, 58, () => setScreen("modes", "songs"), { accent: true, a: song.colorA, b: song.colorB, icon: "▶", hint: "ENTER" });
-    text("↑ ↓ browse  •  Enter choose  •  P preview", 894, 608, 12, "#70799e", "center", 650);
+    const selectedPosition = list.indexOf(song);
+    const visibleCount = 8;
+    const start = clamp(selectedPosition - 2, 0, Math.max(0, list.length - visibleCount));
+    list.slice(start, start + visibleCount).forEach((s, visibleIndex) => {
+      const active = s.id === song.id;
+      const y = 110 + visibleIndex * 67;
+      const x = 48;
+      const w = 526;
+      const h = 61;
+      const hover = pointIn(app.pointer.x, app.pointer.y, { x, y, w, h });
+      ctx.save();
+      if (active) {
+        ctx.shadowColor = UI.pink; ctx.shadowBlur = 18;
+        slantPath(x, y, w, h, 14); ctx.fillStyle = "#f4f7fb"; ctx.fill();
+        ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(116,196,231,.9)"; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = UI.pink; slantPath(x - 12, y, 18, h, 5); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(23, y + 22); ctx.lineTo(36, y + 30); ctx.lineTo(23, y + 38); ctx.closePath(); ctx.fill();
+      } else {
+        slantPath(x, y, w, h, 10);
+        ctx.fillStyle = hover ? "rgba(23,35,46,.94)" : "rgba(5,12,20,.88)"; ctx.fill();
+        ctx.strokeStyle = "rgba(70,101,122,.35)"; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = visibleIndex % 2 ? UI.pink : "rgba(255,0,110,.55)";
+        ctx.fillRect(x - 9, y + 7, 2, h - 14);
+      }
+      ctx.restore();
+
+      cover(s, x + 12, y + 5, 88, 51);
+      const mainColor = active ? "#07101c" : "#f4f8fb";
+      const subColor = active ? "#344555" : "#9bb0bf";
+      text(truncate(s.title, 28), x + 118, y + 21, 18, mainColor, "left", 900);
+      text(truncate(s.artist, 32), x + 118, y + 44, 11, subColor, "left", 650);
+      const isFavorite = app.profile.favorites.includes(s.id);
+      text("★", x + 394, y + 30, 17, isFavorite ? UI.pinkHot : active ? "#9ba4aa" : "#34434f", "center", 850);
+      const rowBest = bestForSong(s);
+      const rowGrade = grade(rowBest);
+      text(rowGrade, x + 439, y + 30, 24, gradeColor(rowGrade), "center", 950);
+      if (active) {
+        ctx.fillStyle = UI.pink; slantPath(x + 468, y, 58, h, 9); ctx.fill();
+        text(difficultyRating(s), x + 497, y + 30, 22, "#fff", "center", 950);
+      } else {
+        text(difficultyRating(s), x + 497, y + 30, 20, "#d6e0e7", "center", 850);
+      }
+      hitRegion(x, y, w, h, () => { app.selectedSong = app.songs.indexOf(s); Audio.stop(); });
+    });
+
+    if (list.length > visibleCount) {
+      const trackY = 112, trackH = 526;
+      ctx.fillStyle = "rgba(255,255,255,.10)"; rounded(590, trackY, 3, trackH, 2); ctx.fill();
+      const thumbH = Math.max(34, trackH * visibleCount / list.length);
+      const progress = selectedPosition / Math.max(1, list.length - 1);
+      ctx.fillStyle = UI.cyan; rounded(589, trackY + (trackH - thumbH) * progress, 5, thumbH, 3); ctx.fill();
+    }
+
+    const px = 628, py = 104, pw = 574, ph = 540;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(px + 18, py); ctx.lineTo(px + pw - 20, py); ctx.lineTo(px + pw, py + 24);
+    ctx.lineTo(px + pw, py + ph - 20); ctx.lineTo(px + pw - 22, py + ph); ctx.lineTo(px + 18, py + ph); ctx.lineTo(px, py + ph - 18); ctx.lineTo(px, py + 22); ctx.closePath();
+    ctx.fillStyle = "rgba(4,11,19,.94)"; ctx.fill();
+    ctx.strokeStyle = "rgba(82,151,188,.58)"; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.strokeStyle = UI.cyan; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(px, py + 78); ctx.lineTo(px, py + 190); ctx.stroke();
+    ctx.restore();
+
+    cover(song, 646, 112, 536, 274);
+    ctx.strokeStyle = "rgba(114,191,228,.55)"; ctx.lineWidth = 1; ctx.strokeRect(646, 112, 536, 274);
+    ctx.fillStyle = "rgba(2,7,13,.78)"; rounded(1128, 124, 39, 39, 5); ctx.fill();
+    ctx.strokeStyle = app.profile.favorites.includes(song.id) ? UI.pinkHot : UI.cyan; ctx.stroke();
+    text("♥", 1147, 144, 19, app.profile.favorites.includes(song.id) ? UI.pinkHot : "#dce8ee", "center", 850);
+    hitRegion(1127, 123, 42, 42, () => toggleFavorite(song));
+
+    text(truncate(song.title, 34), 648, 414, 30, "#f8fbff", "left", 950);
+    text(truncate(song.artist, 42), 648, 445, 13, "#b7c5cf", "left", 600);
+    line(648, 463, 930, 463, "#b7c8d3", 1);
+    smallCaps("BPM", 1070, 416, "#778c9e"); text(song.bpm || "—", 1158, 416, 14, "#ecf4f8", "right", 800);
+    smallCaps("LENGTH", 1070, 440, "#778c9e"); text(formatTime(song.duration), 1158, 440, 14, "#ecf4f8", "right", 800);
+
+    const diffColors = ["#50e58e", "#36b9ff", "#ffd15c", UI.pinkHot, "#77818a"];
+    const diffLabels = ["EASY", "NORMAL", "HARD", "EXPERT", "MASTER"];
+    const selectedDifficulty = clamp((song.difficulty || 1) - 1, 0, 4);
+    const currentRating = difficultyRating(song);
+    for (let i = 0; i < 5; i++) {
+      const cx = 690 + i * 103;
+      const cy = 512;
+      const active = i === selectedDifficulty;
+      const value = clamp(currentRating + (i - selectedDifficulty) * 3, 1, 20);
+      ctx.save();
+      ctx.strokeStyle = diffColors[i]; ctx.lineWidth = active ? 3 : 2;
+      if (active) { ctx.shadowColor = diffColors[i]; ctx.shadowBlur = 16; }
+      ctx.globalAlpha = active ? 1 : 0.56;
+      ctx.beginPath(); ctx.arc(cx, cy, active ? 33 : 29, 0, TAU); ctx.stroke();
+      if (active) { ctx.globalAlpha = 0.14; ctx.fillStyle = diffColors[i]; ctx.fill(); }
+      ctx.globalAlpha = active ? 1 : 0.68;
+      text(value, cx, cy, active ? 23 : 19, active ? "#fff" : "#b7c3cc", "center", 900);
+      smallCaps(diffLabels[i], cx, 552, diffColors[i], "center");
+      ctx.restore();
+    }
+
+    const best = bestForSong(song);
+    ctx.fillStyle = "rgba(5,13,22,.98)"; slantPath(642, 574, 548, 56, 8); ctx.fill();
+    ctx.strokeStyle = "rgba(95,157,190,.5)"; ctx.stroke();
+    smallCaps("BEST SCORE", 665, 590, "#8296a7");
+    text(best ? formatNumber(best.score) : "---,---", 665, 614, 23, "#f5f9fc", "left", 900);
+    text(grade(best), 838, 606, 29, gradeColor(grade(best)), "center", 950);
+    line(879, 586, 879, 619, "rgba(174,203,218,.55)", 1);
+    smallCaps("MAX COMBO", 905, 590, "#8296a7");
+    text(best ? formatNumber(best.combo) : "---", 905, 614, 18, "#f5f9fc", "left", 850);
+
+    ctx.fillStyle = "rgba(5,13,22,.92)";
+    slantPath(1191, 113, 89, 273, 10); ctx.fill();
+    line(1192, 130, 1192, 367, "rgba(95,157,190,.45)", 1);
+    ctx.save(); ctx.translate(1238, 250); ctx.rotate(Math.PI / 2); smallCaps(song.builtin ? "ORIGINAL" : song.fileBased ? "FILE TRACK" : "CUSTOM", 0, 0, "#b8c8d3", "center"); ctx.restore();
+
+    drawSongSelectFooter(song);
+    const playX = 1000, playY = 644, playW = 280, playH = 76;
+    ctx.save(); ctx.shadowColor = UI.pink; ctx.shadowBlur = 20;
+    slantPath(playX, playY, playW, playH, 28); ctx.fillStyle = UI.pink; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.28; ctx.fillStyle = "#fff";
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(playX + 20 + i * 17, playY + playH); ctx.lineTo(playX + 56 + i * 17, playY); ctx.lineTo(playX + 64 + i * 17, playY); ctx.lineTo(playX + 28 + i * 17, playY + playH); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+    text("▶", 1115, 681, 27, "#fff", "center", 900);
+    text("PLAY", 1167, 681, 30, "#fff", "center", 950);
+    hitRegion(playX, playY, playW, playH, () => setScreen("modes", "songs"));
   }
 
   function stat(label, value, x, y) {
@@ -399,15 +683,15 @@
   }
 
   function drawWorkshop() {
-    background("#ff4fbb", "#7058ff"); beginUI();
+    background(UI.cyan, UI.pink); beginUI();
     topBar("BEAT WORKSHOP", "Create, record, save, and share playable songs", () => setScreen("main"));
     panel(68, 118, 1144, 492, 0.72, 30);
     text("TURN ANY SONG INTO A LEVEL", 110, 169, 30, "#fff", "left", 900);
     text("Import audio, tap along, add cover art, then save it to your library.", 110, 207, 15, "#aeb7d9", "left", 600);
     const items = [
-      { y: 246, icon: "+", title: "NEW SONG", sub: "Choose audio and record your own beat map", action: () => { app.pendingForeign = null; audioPicker.click(); }, a: "#6cf2ff" },
+      { y: 246, icon: "+", title: "NEW SONG", sub: "Choose audio and record your own beat map", action: () => { app.pendingForeign = null; audioPicker.click(); }, a: UI.cyan },
       { y: 320, icon: "⇄", title: "CONVERT RHYTHM MAP", sub: "osu!, StepMania, Quaver, Clone Hero, FNF, Beat Saber", action: () => { app.pendingForeign = null; foreignPicker.click(); }, a: "#ffd166" },
-      { y: 394, icon: "⇧", title: "IMPORT PULSEPACK", sub: "Load a native .pulsepack song file", action: () => packPicker.click(), a: "#ff4fbb" },
+      { y: 394, icon: "⇧", title: "IMPORT PULSEPACK", sub: "Load a native .pulsepack song file", action: () => packPicker.click(), a: UI.pink },
       { y: 468, icon: "▦", title: "MANAGE SONGS", sub: `${Math.max(0, app.songs.filter(s => !s.builtin && !s.fileBased).length)} custom songs saved`, action: () => setScreen("manage", "workshop"), a: "#9cff7a" }
     ];
     items.forEach(item => {
@@ -431,7 +715,7 @@
     if (/clone/i.test(format)) return ["#9cff7a", "#ffd166"];
     if (/friday/i.test(format)) return ["#ff4fbb", "#59e1ff"];
     if (/beat saber/i.test(format)) return ["#ff4f5e", "#35a7ff"];
-    return ["#6cf2ff", "#7058ff"];
+    return [UI.cyan, UI.pink];
   }
 
   async function importForeign(file) {
@@ -572,7 +856,7 @@
   }
 
   function drawRecords() {
-    background("#ffd166", "#ff4fbb"); beginUI();
+    background("#ffd166", UI.pink); beginUI();
     topBar("RECORDS", "Your rhythm career at a glance", () => setScreen("main"));
     const cards = [
       ["TOTAL PLAYS", formatNumber(app.profile.plays), "▶"],
@@ -605,7 +889,7 @@
   }
 
   function drawSettings() {
-    background("#6cf2ff", "#7058ff"); beginUI();
+    background(UI.cyan, UI.pink); beginUI();
     topBar("SETTINGS", "Tune the game to your setup", () => { saveProfile(); setScreen("main"); });
     panel(260, 120, 760, 490, 0.73, 28);
     settingRow("MASTER VOLUME", Math.round(app.profile.settings.volume * 100) + "%", 180,
@@ -627,12 +911,12 @@
 
   function settingToggle(label, value, y, action) {
     smallCaps(label, 310, y, "#9ca6ca");
-    button(value ? "ON" : "OFF", 760, y - 26, 160, 52, action, { accent: value, a: "#6cf2ff", b: "#7058ff" });
+    button(value ? "ON" : "OFF", 760, y - 26, 160, 52, action, { accent: value, a: UI.pink, b: UI.pinkHot });
     line(310, y + 43, 920, y + 43, "rgba(255,255,255,.08)");
   }
 
   function drawHelp() {
-    background("#6cf2ff", "#ff4fbb"); beginUI();
+    background(UI.cyan, UI.pink); beginUI();
     topBar("HOW TO PLAY", "One button. Good timing. Endless songs.", () => setScreen("main"));
     const help = [
       ["PLAY", "Press SPACE or tap when a moving pulse reaches the target ring."],
@@ -646,7 +930,7 @@
       const x = 80 + (i % 2) * 590;
       const y = 126 + Math.floor(i / 2) * 170;
       panel(x, y, 540, 138, 0.7, 22);
-      text(String(i + 1).padStart(2, "0"), x + 35, y + 35, 15, i % 2 ? "#ff75c8" : "#6cf2ff", "left", 900);
+      text(String(i + 1).padStart(2, "0"), x + 35, y + 35, 15, i % 2 ? UI.pinkHot : UI.cyan, "left", 900);
       text(item[0], x + 80, y + 35, 17, "#fff", "left", 850);
       wrapText(item[1], x + 35, y + 76, 470, 21, 13, "#9ca6ca", "left");
     });
@@ -673,7 +957,7 @@
     const title = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
     const draft = {
       id: uid(), title: title || "Untitled", artist: "Unknown Artist", bpm: 120,
-      duration: 0, difficulty: 1, colorA: "#6cf2ff", colorB: "#7058ff",
+      duration: 0, difficulty: 1, colorA: UI.cyan, colorB: UI.pink,
       beats: [], audioBlob: file, audioName: file.name, createdAt: Date.now()
     };
     try {
@@ -765,12 +1049,12 @@
 
   function field(label, value, x, y, w, id, numeric) {
     const active = app.textField && app.textField.id === id;
-    smallCaps(label, x, y - 10, active ? "#6cf2ff" : "#8f99bf");
+    smallCaps(label, x, y - 10, active ? UI.cyan : "#8f99bf");
     button("", x, y + 8, w, 46, () => startTextField(id, value, numeric), { radius: 10 });
     text(truncate(value || "", numeric ? 10 : 38), x + 14, y + 31, 15, "#fff", "left", 700);
     if (active && Math.floor(app.time * 2) % 2 === 0) {
       const tw = ctx.measureText(truncate(app.textField.value, numeric ? 10 : 38)).width;
-      line(x + 15 + tw, y + 20, x + 15 + tw, y + 42, "#6cf2ff", 2);
+      line(x + 15 + tw, y + 20, x + 15 + tw, y + 42, UI.cyan, 2);
     }
   }
 
@@ -1437,6 +1721,7 @@
     if (app.screen === "songs") {
       if (event.code === "ArrowUp") { changeSelection(-1); return; }
       if (event.code === "ArrowDown") { changeSelection(1); return; }
+      if (event.key.toLowerCase() === "z") { toggleFavorite(selectedSong()); return; }
       if (event.key.toLowerCase() === "p") { togglePreview(selectedSong()); return; }
       if (event.code === "Enter" || event.code === "Space") { setScreen("modes", "songs"); return; }
       if (event.code === "Escape") { setScreen("main"); return; }
@@ -1476,10 +1761,24 @@
   }
 
   function changeSelection(direction) {
+    const songs = app.screen === "songs" ? visibleSongs() : app.songs;
+    if (!songs.length) return;
     Audio.stop();
-    app.selectedSong = clamp(app.selectedSong + direction, 0, app.songs.length - 1);
-    app.focus = app.selectedSong + 1;
+    let position = songs.indexOf(selectedSong());
+    if (position < 0) position = 0;
+    position = clamp(position + direction, 0, songs.length - 1);
+    app.selectedSong = app.songs.indexOf(songs[position]);
+    app.focus = position + 1;
   }
+
+  canvas.addEventListener("wheel", event => {
+    if (app.screen !== "songs" || Math.abs(event.deltaY) < 1) return;
+    event.preventDefault();
+    const now = performance.now();
+    if (now - app.lastSongWheel < 90) return;
+    app.lastSongWheel = now;
+    changeSelection(event.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
 
   audioPicker.addEventListener("change", () => {
     const file = audioPicker.files && audioPicker.files[0];
