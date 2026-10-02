@@ -1,6 +1,6 @@
 # Pulse//Space
 
-A complete single-button rhythm game made with plain HTML, JavaScript, Web Audio, IndexedDB, and one Canvas. There are no visible HTML controls or framework components: every menu, button, card, editor field, waveform, note, result screen, and effect is drawn directly onto the canvas.
+A complete four-lane rhythm game made with plain HTML, JavaScript, Web Audio, IndexedDB, and one Canvas. There are no visible HTML controls or framework components: every menu, button, card, editor field, waveform, note, result screen, and effect is drawn directly onto the canvas.
 
 ## Start the game
 
@@ -19,9 +19,9 @@ Then open <http://localhost:8080>.
 | Screen | Keyboard | Mouse / touch |
 |---|---|---|
 | Menus | Arrow keys, Enter, Escape | Click or tap |
-| Gameplay | Space or Enter to hit, Escape to pause | Tap anywhere to hit |
+| Gameplay | D/F/J/K or Left/Down/Up/Right to hit lanes, Escape to pause | Tap the corresponding lane |
 | Workshop | Enter play/pause, Space record, Backspace undo, arrows seek | Use canvas controls and waveform |
-| Song select | Up/down browse, Enter choose, P preview | Select a card |
+| Song select | Up/down browse, Enter choose, Z favorite, P preview | Select a song, use the wheel to browse, or click the tabs and controls |
 | Jukebox | Left/right change, P play/pause | Use canvas controls |
 
 ## Make a song in the game
@@ -48,10 +48,10 @@ Open **Workshop → Convert Rhythm Map** and choose a chart or complete song arc
 | Friday Night Funkin' | Legacy chart `.json`, generic `.zip` | `Inst.ogg` when present |
 | Beat Saber | Song `.zip`, `.bplist` | Audio, cover, and every listed difficulty |
 
-Pulse//Space is a one-button game, so conversion deliberately flattens spatial mechanics:
+Pulse//Space automatically routes converted timing data across its four playable lanes. Conversion deliberately simplifies unsupported spatial mechanics:
 
 - Simultaneous chords become one pulse.
-- Lanes, arrows, saber directions, and fret colors are discarded.
+- Source lanes, arrows, saber directions, and fret colors are normalized into the four-lane chart.
 - Holds, rolls, sliders, spinners, and sustains become a pulse at their start.
 - Mines, bombs, walls, star power, and purely visual events are ignored.
 - BPM changes and chart offsets are preserved where the source format provides them.
@@ -76,9 +76,11 @@ Large source songs create large Pulsepacks because their audio is embedded. This
 ## Included systems
 
 - Three built-in playable synth tracks, so the game works immediately
+- Four-lane perspective gameplay with falling notes, lane glow, hit bursts, and D/F/J/K plus arrow-key controls
 - Classic, Precision, Survival, and Zen modes
 - Score, accuracy, combo, Perfect/Good/Miss timing, grades, and personal bests
 - Song library and full-cover song previews
+- Arcade-style song select with category tabs, favorites, difficulty display, records, and mouse-wheel browsing
 - Jukebox mode
 - Beat-map recording studio
 - Audio and cover import

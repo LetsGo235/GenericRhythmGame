@@ -54,6 +54,13 @@
     muted: "#8b9caf"
   };
 
+  const GAME_LANES = [
+    { key: "D", codes: ["KeyD", "ArrowLeft"], color: "#59e8ff" },
+    { key: "F", codes: ["KeyF", "ArrowDown"], color: "#9d6bff" },
+    { key: "J", codes: ["KeyJ", "ArrowUp"], color: "#ff4fbd" },
+    { key: "K", codes: ["KeyK", "ArrowRight"], color: "#ff7a71" }
+  ];
+
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function lerp(a, b, t) { return a + (b - a) * t; }
   function ease(t) { return 1 - Math.pow(1 - clamp(t, 0, 1), 3); }
@@ -331,7 +338,7 @@
     background(UI.cyan, UI.pink);
     drawLogo(W / 2, 205, 150);
     text("PULSE//SPACE", W / 2, 325, 62, "#fff", "center", 950);
-    text("A ONE-BUTTON RHYTHM PLAYGROUND", W / 2, 374, 14, "#aeb7d9", "center", 800);
+    text("A FOUR-LANE RHYTHM PLAYGROUND", W / 2, 374, 14, "#aeb7d9", "center", 800);
     const pulse = 0.65 + Math.sin(app.time * 4) * 0.15;
     text("PRESS SPACE • ENTER • OR TAP", W / 2, 495, 16, `rgba(108,242,255,${pulse})`, "center", 850);
     text("Canvas only. Keyboard, mouse, and touch ready.", W / 2, 662, 12, "#687092", "center", 600);
@@ -664,7 +671,7 @@
       wrapText(mode.blurb, x + 34, y + 195, 202, 22, 13, "#aeb7d9", "center");
       smallCaps(mode.id === "precision" ? "EXPERT" : mode.id === "zen" ? "RELAXED" : mode.id === "survival" ? "3 LIVES" : "STANDARD", x + 135, y + 302, active ? song.colorA : "#737c9f", "center");
     });
-    button("START SONG", 444, 558, 392, 64, () => startGame(), { accent: true, a: song.colorA, b: song.colorB, icon: "▶", hint: "SPACE" });
+    button("START SONG", 444, 558, 392, 64, () => startGame(), { accent: true, a: song.colorA, b: song.colorB, icon: "▶", hint: "ENTER" });
     text("← → select mode", W / 2, 660, 12, "#70799e", "center", 650);
   }
 
@@ -917,9 +924,9 @@
 
   function drawHelp() {
     background(UI.cyan, UI.pink); beginUI();
-    topBar("HOW TO PLAY", "One button. Good timing. Endless songs.", () => setScreen("main"));
+    topBar("HOW TO PLAY", "Four lanes. Good timing. Endless songs.", () => setScreen("main"));
     const help = [
-      ["PLAY", "Press SPACE or tap when a moving pulse reaches the target ring."],
+      ["PLAY", "Press D, F, J, or K when a falling note reaches its matching lane. Arrow keys also work."],
       ["TIMING", "Perfect hits score the most. Early and late hits still count inside the window."],
       ["WORKSHOP", "Choose audio, press ENTER to play it, then tap SPACE on each beat you hear."],
       ["NAVIGATION", "Use arrows + Enter, the mouse, or touch. Escape always goes back or pauses."],
@@ -1294,6 +1301,13 @@
     toast("Song removed.", "#ff758f");
   }
 
+  function chartLane(song, index) {
+    if (Array.isArray(song.lanes) && Number.isFinite(song.lanes[index])) return clamp(Math.round(song.lanes[index]), 0, 3);
+    const pattern = [0, 1, 2, 3, 1, 0, 2, 1, 3, 2, 0, 3, 1, 2, 3, 0];
+    const seed = String(song.id || song.title || "pulse").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % 4;
+    return (pattern[index % pattern.length] + seed) % 4;
+  }
+
   async function startGame() {
     const song = selectedSong();
     if (!song || !song.beats.length) { toast("This song has no beat map.", "#ff758f"); return; }
@@ -1303,7 +1317,12 @@
       app.game = {
         song,
         mode: selectedMode(),
-        notes: song.beats.map(t => ({ t, state: "pending", delta: 0 })),
+        notes: song.beats.map((beat, index) => ({
+          t: typeof beat === "number" ? beat : beat.t,
+          lane: Number.isFinite(beat && beat.lane) ? clamp(Math.round(beat.lane), 0, 3) : chartLane(song, index),
+          state: "pending",
+          delta: 0
+        })),
         countdown: 2.4,
         started: false,
         paused: false,
@@ -1317,6 +1336,9 @@
         judgement: "",
         judgementAge: 10,
         hitFlash: 0,
+        laneFlash: [0, 0, 0, 0],
+        laneMiss: [0, 0, 0, 0],
+        laneHeld: [false, false, false, false],
         ended: false
       };
       app.screen = "play";
@@ -1350,18 +1372,24 @@
     }
     g.judgementAge += dt;
     g.hitFlash = Math.max(0, g.hitFlash - dt * 4.2);
+    for (let lane = 0; lane < 4; lane++) {
+      g.laneFlash[lane] = Math.max(0, g.laneFlash[lane] - dt * 5.5);
+      g.laneMiss[lane] = Math.max(0, g.laneMiss[lane] - dt * 3.5);
+    }
     if (g.health <= 0 && g.mode.fail) finishGame(true);
     if (!Audio.playing && now > 0 && !g.ended) finishGame(false);
   }
 
-  function hitBeat() {
+  function hitLane(lane) {
     const g = app.game;
     if (!g || g.paused || !g.started || g.ended) return;
+    lane = clamp(lane, 0, 3);
+    g.laneFlash[lane] = 1;
     const now = gameTime();
     let best = null;
     let bestAbs = Infinity;
     for (const note of g.notes) {
-      if (note.state !== "pending") continue;
+      if (note.state !== "pending" || note.lane !== lane) continue;
       const delta = now - note.t;
       const abs = Math.abs(delta);
       if (abs < bestAbs) { best = note; bestAbs = abs; }
@@ -1388,13 +1416,14 @@
     g.bestCombo = Math.max(g.bestCombo, g.combo);
     g.judgementAge = 0; g.hitFlash = 1;
     if (app.profile.settings.hitSounds && !g.song.builtin) Audio.tickSound(best.state === "perfect" ? 1 : 0.5);
-    burst(300, 435, best.state === "perfect" ? g.song.colorA : "#ffd166", best.state === "perfect" ? 16 : 8);
+    burst(laneCenterAt(lane, 1), TRACK_HIT_Y, best.state === "perfect" ? GAME_LANES[lane].color : "#ffd166", best.state === "perfect" ? 18 : 9);
   }
 
   function registerMiss(note) {
     const g = app.game;
     note.state = "miss"; g.miss++; g.combo = 0;
     g.judgement = "MISS"; g.judgementAge = 0;
+    if (g.laneMiss) g.laneMiss[note.lane] = 1;
     if (g.mode.id === "survival") g.health = Math.max(0, g.health - 17);
   }
 
@@ -1441,6 +1470,7 @@
     const g = app.game;
     if (!g || !g.started) return;
     g.paused = !g.paused;
+    if (g.laneHeld) g.laneHeld.fill(false);
     if (g.paused) Audio.pause(); else {
       if (g.song.builtin) {
         // Built-in synth previews cannot truly pause, so restart their future notes at the same chart time.
@@ -1449,92 +1479,230 @@
     }
   }
 
+  const TRACK_TOP_Y = 108;
+  const TRACK_HIT_Y = 600;
+
+  function trackBounds(depth) {
+    const d = Math.pow(clamp(depth, 0, 1), 1.42);
+    return {
+      y: lerp(TRACK_TOP_Y, TRACK_HIT_Y, d),
+      left: lerp(582, 258, d),
+      right: lerp(698, 1022, d)
+    };
+  }
+
+  function laneCenterAt(lane, depth) {
+    const bounds = trackBounds(depth);
+    return bounds.left + (bounds.right - bounds.left) * ((lane + 0.5) / 4);
+  }
+
+  function drawGameplayBackdrop(song) {
+    ctx.fillStyle = "#020610";
+    ctx.fillRect(0, 0, W, H);
+
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#06172e");
+    sky.addColorStop(0.48, rgba(song.colorB || UI.pink, 0.2));
+    sky.addColorStop(1, "#020610");
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+    const nebula = ctx.createRadialGradient(240, 235, 0, 240, 235, 430);
+    nebula.addColorStop(0, "rgba(78,171,255,.34)");
+    nebula.addColorStop(0.46, "rgba(116,75,255,.16)");
+    nebula.addColorStop(1, "rgba(2,6,16,0)");
+    ctx.fillStyle = nebula; ctx.fillRect(0, 0, 700, 620);
+
+    const planet = ctx.createRadialGradient(918, 68, 20, 918, 68, 245);
+    planet.addColorStop(0, "rgba(231,250,255,.96)");
+    planet.addColorStop(0.37, "rgba(115,194,255,.76)");
+    planet.addColorStop(0.75, "rgba(55,92,218,.38)");
+    planet.addColorStop(1, "rgba(19,36,93,0)");
+    ctx.fillStyle = planet; ctx.beginPath(); ctx.arc(918, 68, 245, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,119,209,.58)"; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.ellipse(905, 112, 348, 58, -0.14, 0.08, Math.PI * 1.06); ctx.stroke();
+    ctx.strokeStyle = "rgba(108,234,255,.44)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(902, 119, 385, 76, -0.14, 0.05, Math.PI * 1.09); ctx.stroke();
+    ctx.restore();
+
+    for (let i = 0; i < 86; i++) {
+      const x = (i * 191 + 37) % W;
+      const y = (i * 83 + 29) % 430;
+      const bright = i % 13 === 0;
+      ctx.fillStyle = bright ? "rgba(207,247,255,.95)" : "rgba(171,213,255,.48)";
+      ctx.fillRect(x, y, bright ? 2 : 1, bright ? 2 : 1);
+      if (bright) {
+        line(x - 5, y + 1, x + 7, y + 1, "rgba(116,226,255,.32)", 1);
+        line(x + 1, y - 5, x + 1, y + 7, "rgba(255,117,209,.28)", 1);
+      }
+    }
+
+    ctx.fillStyle = "rgba(2,8,18,.82)";
+    for (let i = 0; i < 22; i++) {
+      const x = i * 63 - 24;
+      const height = 30 + (i * 37 % 92);
+      ctx.fillRect(x, 315 - height, 38 + (i % 3) * 11, height);
+      if (i % 4 === 0) ctx.fillRect(x + 12, 315 - height - 36, 4, 36);
+    }
+    ctx.fillStyle = "rgba(8,17,31,.88)";
+    ctx.beginPath(); ctx.moveTo(0, 335); ctx.lineTo(465, 258); ctx.lineTo(504, 278); ctx.lineTo(0, 430); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(W, 290); ctx.lineTo(804, 238); ctx.lineTo(780, 265); ctx.lineTo(W, 405); ctx.closePath(); ctx.fill();
+    line(0, 332, 492, 261, "rgba(93,202,255,.32)", 2);
+    line(790, 246, W, 294, "rgba(255,68,174,.36)", 2);
+
+    const vignette = ctx.createRadialGradient(W / 2, 335, 120, W / 2, 360, 760);
+    vignette.addColorStop(0, "rgba(0,0,0,0)");
+    vignette.addColorStop(1, "rgba(0,2,8,.72)");
+    ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawHighway(song, g) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(582, TRACK_TOP_Y); ctx.lineTo(698, TRACK_TOP_Y);
+    ctx.lineTo(1100, H); ctx.lineTo(180, H); ctx.closePath();
+    const road = ctx.createLinearGradient(0, TRACK_TOP_Y, 0, H);
+    road.addColorStop(0, "rgba(7,8,24,.84)");
+    road.addColorStop(1, "rgba(4,5,16,.98)");
+    ctx.fillStyle = road; ctx.fill();
+
+    for (let lane = 0; lane <= 4; lane++) {
+      const topX = 582 + (698 - 582) * lane / 4;
+      const bottomX = 180 + (1100 - 180) * lane / 4;
+      line(topX, TRACK_TOP_Y, bottomX, H, lane === 0 || lane === 4 ? "rgba(255,69,179,.9)" : "rgba(255,58,168,.28)", lane === 0 || lane === 4 ? 4 : 1.2);
+    }
+    for (let i = 0; i < 13; i++) {
+      const d = i / 12;
+      const bounds = trackBounds(d);
+      line(bounds.left, bounds.y, bounds.right, bounds.y, i === 12 ? "rgba(255,244,255,.95)" : "rgba(255,61,173,.16)", i === 12 ? 3 : 1);
+    }
+
+    line(582, TRACK_TOP_Y, 180, H, "rgba(84,228,255,.82)", 1.5);
+    line(698, TRACK_TOP_Y, 1100, H, "rgba(255,67,177,.95)", 1.5);
+    ctx.shadowColor = UI.pinkHot; ctx.shadowBlur = 20;
+    line(258, TRACK_HIT_Y, 1022, TRACK_HIT_Y, "rgba(255,142,221,.96)", 3);
+    ctx.restore();
+
+    for (let lane = 0; lane < 4; lane++) {
+      const center = laneCenterAt(lane, 1);
+      const active = g.laneHeld[lane] || g.laneFlash[lane] > 0;
+      if (active) {
+        ctx.save();
+        const glow = ctx.createLinearGradient(center, TRACK_TOP_Y, center, TRACK_HIT_Y);
+        glow.addColorStop(0, rgba(GAME_LANES[lane].color, 0));
+        glow.addColorStop(1, rgba(GAME_LANES[lane].color, 0.24 + g.laneFlash[lane] * 0.24));
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.moveTo(laneCenterAt(lane, 0) - 10, TRACK_TOP_Y);
+        ctx.lineTo(laneCenterAt(lane, 0) + 10, TRACK_TOP_Y);
+        ctx.lineTo(center + 86, TRACK_HIT_Y);
+        ctx.lineTo(center - 86, TRACK_HIT_Y);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+
+      ctx.save();
+      const miss = g.laneMiss[lane];
+      ctx.shadowColor = miss ? "#ff425f" : GAME_LANES[lane].color;
+      ctx.shadowBlur = active ? 30 : 12;
+      ctx.fillStyle = active ? "rgba(255,255,255,.95)" : miss ? "rgba(255,55,85,.72)" : "rgba(5,10,23,.92)";
+      rounded(center - 67, 574, 134, 51, 9); ctx.fill();
+      ctx.strokeStyle = active ? "#fff" : miss ? "#ff5874" : GAME_LANES[lane].color;
+      ctx.lineWidth = active ? 4 : 2; ctx.stroke();
+      text(GAME_LANES[lane].key, center, 600, 22, active ? "#07101c" : "#fff", "center", 900);
+      ctx.restore();
+      smallCaps(lane === 0 ? "LEFT" : lane === 1 ? "DOWN" : lane === 2 ? "UP" : "RIGHT", center, 644, "#7f91a4", "center");
+    }
+  }
+
+  function drawFallingNote(note, now, lead) {
+    const until = note.t - now;
+    if (until < -0.28 || until > lead + 0.25) return;
+    const depth = clamp(1 - until / lead, 0, 1.08);
+    const bounds = trackBounds(depth);
+    const laneWidth = (bounds.right - bounds.left) / 4;
+    const center = bounds.left + laneWidth * (note.lane + 0.5);
+    const width = laneWidth * 0.72;
+    const height = lerp(7, 28, Math.pow(clamp(depth, 0, 1), 1.15));
+    const color = GAME_LANES[note.lane].color;
+    ctx.save();
+    ctx.shadowColor = color; ctx.shadowBlur = lerp(10, 28, depth);
+    ctx.fillStyle = gradient("rgba(255,255,255,.98)", color, center - width / 2, bounds.y - height / 2, width, height);
+    rounded(center - width / 2, bounds.y - height / 2, width, height, Math.max(3, height * 0.28)); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.96)"; ctx.lineWidth = lerp(1, 3, depth); ctx.stroke();
+    ctx.globalAlpha = 0.62;
+    ctx.fillStyle = "#fff"; rounded(center - width * 0.38, bounds.y - 2, width * 0.76, 3, 2); ctx.fill();
+    ctx.restore();
+  }
+
   function drawPlay() {
     const g = app.game;
     if (!g) { setScreen("songs"); return; }
     const song = g.song;
-    background(song.colorA, song.colorB);
     updateGame(app.dt);
     updateParticles(app.dt);
+    drawGameplayBackdrop(song);
+    drawHighway(song, g);
+
+    const lead = 2.15;
+    const now = gameTime();
+    for (const note of g.notes) if (note.state === "pending") drawFallingNote(note, now, lead);
     drawParticles();
 
-    text(song.title, 48, 38, 18, "#fff", "left", 850);
-    text(g.mode.name, 48, 62, 11, song.colorA, "left", 850);
-    text(formatNumber(g.score), 1232, 42, 28, "#fff", "right", 900);
-    text("SCORE", 1232, 70, 10, "#8f99bf", "right", 800);
+    ctx.fillStyle = "rgba(2,7,16,.72)";
+    slantPath(14, 14, 340, 96, 12); ctx.fill();
+    ctx.strokeStyle = "rgba(91,223,255,.56)"; ctx.lineWidth = 1; ctx.stroke();
+    cover(song, 24, 23, 86, 72);
+    text(truncate(song.title, 21), 126, 39, 25, "#fff", "left", 900);
+    text(truncate(song.artist, 27), 126, 66, 13, "#b9c9d8", "left", 650);
+    ctx.fillStyle = UI.pinkHot; slantPath(126, 80, 93, 25, 6); ctx.fill();
+    smallCaps((g.mode.name || "CLASSIC"), 171, 93, "#fff", "center");
+    ctx.strokeStyle = "rgba(255,255,255,.55)"; slantPath(226, 80, 112, 25, 6); ctx.stroke();
+    smallCaps("LV. " + difficultyRating(song), 281, 93, "#fff", "center");
+
+    smallCaps("SCORE", 1100, 25, "#d9e7ef", "center");
+    text(String(Math.round(g.score)).padStart(7, "0"), 1110, 58, 34, "#fff", "center", 900);
+    line(980, 82, 1190, 82, UI.pinkHot, 2);
+    smallCaps("MAX COMBO", 1020, 98, "#8fa3b5");
+    text(g.bestCombo, 1178, 98, 16, "#fff", "right", 900);
+    ctx.fillStyle = "rgba(3,8,17,.84)"; rounded(1213, 21, 50, 50, 5); ctx.fill();
+    ctx.strokeStyle = "#eaf4f8"; ctx.lineWidth = 2; ctx.stroke();
+    text("Ⅱ", 1238, 46, 25, "#fff", "center", 900);
+    hitRegion(1210, 18, 56, 56, () => pauseGame());
 
     if (g.mode.id === "survival") {
-      ctx.fillStyle = "rgba(255,255,255,.09)"; rounded(472, 38, 336, 10, 5); ctx.fill();
-      ctx.fillStyle = g.health > 35 ? gradient(song.colorA, song.colorB, 472, 38, 336, 10) : "#ff5874";
-      rounded(472, 38, 336 * g.health / 100, 10, 5); ctx.fill();
-      smallCaps("ENERGY", W / 2, 66, "#8f99bf", "center");
+      ctx.fillStyle = "rgba(255,255,255,.09)"; rounded(472, 34, 336, 9, 5); ctx.fill();
+      ctx.fillStyle = g.health > 35 ? gradient(UI.cyan, UI.pinkHot, 472, 34, 336, 9) : "#ff5874";
+      rounded(472, 34, 336 * g.health / 100, 9, 5); ctx.fill();
+      smallCaps("ENERGY", W / 2, 59, "#a8b9c7", "center");
     }
-
-    const targetX = 300;
-    const trackY = 435;
-    const lead = 1.7;
-    const now = gameTime();
-    const endX = 1180;
-    ctx.save();
-    ctx.globalAlpha = 0.8;
-    line(94, trackY, 1200, trackY, "rgba(255,255,255,.13)", 3);
-    line(targetX, 146, targetX, 610, rgba(song.colorA, 0.22), 2);
-    for (let i = 0; i < 12; i++) {
-      const x = targetX + i / 11 * (endX - targetX);
-      const height = 30 + i * 2;
-      line(x, trackY - height, x, trackY + height, "rgba(255,255,255,.045)", 1);
-    }
-    ctx.restore();
-
-    for (const note of g.notes) {
-      if (note.state !== "pending") continue;
-      const until = note.t - now;
-      if (until < -0.3 || until > lead + 0.4) continue;
-      const p = 1 - until / lead;
-      const x = lerp(endX, targetX, p);
-      const size = lerp(14, 31, clamp(p, 0, 1));
-      ctx.save();
-      ctx.shadowColor = song.colorB; ctx.shadowBlur = 18;
-      ctx.fillStyle = gradient(song.colorA, song.colorB, x - size, trackY - size, size * 2, size * 2);
-      ctx.beginPath(); ctx.arc(x, trackY, size, 0, TAU); ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.7)";
-      ctx.beginPath(); ctx.arc(x, trackY, size * 0.28, 0, TAU); ctx.fill();
-      ctx.restore();
-    }
-
-    const breathe = app.reducedMotion ? 0 : Math.sin(app.time * 5) * 3;
-    ctx.save();
-    ctx.strokeStyle = g.hitFlash ? "#fff" : song.colorA;
-    ctx.lineWidth = 7;
-    ctx.shadowColor = song.colorA; ctx.shadowBlur = 26 + g.hitFlash * 25;
-    ctx.beginPath(); ctx.arc(targetX, trackY, 49 + breathe + g.hitFlash * 12, 0, TAU); ctx.stroke();
-    ctx.lineWidth = 2; ctx.globalAlpha = 0.45;
-    ctx.beginPath(); ctx.arc(targetX, trackY, 72 + breathe, 0, TAU); ctx.stroke();
-    ctx.restore();
 
     if (!g.started) {
+      ctx.fillStyle = "rgba(1,4,12,.34)"; ctx.fillRect(0, 0, W, H);
       const count = Math.max(1, Math.ceil(g.countdown));
-      text(count, W / 2, H / 2, 104, "#fff", "center", 950);
-      text("GET READY", W / 2, H / 2 + 82, 15, song.colorA, "center", 850);
+      text(count, W / 2, 350, 100, "#fff", "center", 900);
+      smallCaps("READY THE FOUR LANES", W / 2, 422, UI.cyan, "center");
     } else {
-      if (g.judgementAge < 0.65) {
-        const alpha = 1 - clamp((g.judgementAge - 0.35) / 0.3, 0, 1);
-        const color = g.judgement === "PERFECT" ? song.colorA : g.judgement === "MISS" ? "#ff5874" : g.judgement === "EMPTY" ? "#737c9f" : "#ffd166";
-        ctx.save(); ctx.globalAlpha = alpha;
-        text(g.judgement, targetX, 320 - ease(g.judgementAge / 0.65) * 15, 25, color, "center", 950);
+      if (g.judgementAge < 0.68) {
+        const alpha = 1 - clamp((g.judgementAge - 0.36) / 0.32, 0, 1);
+        const color = g.judgement === "PERFECT" ? "#fff" : g.judgement === "MISS" ? "#ff5874" : g.judgement === "EMPTY" ? "#748494" : "#ffd166";
+        ctx.save(); ctx.globalAlpha = alpha; ctx.shadowColor = g.judgement === "PERFECT" ? UI.pinkHot : color; ctx.shadowBlur = 18;
+        text(g.judgement, W / 2, 450 - ease(g.judgementAge / 0.68) * 17, 31, color, "center", 900);
         ctx.restore();
       }
       if (g.combo > 1) {
-        text(g.combo, targetX, 538, 42, "#fff", "center", 950);
-        smallCaps("COMBO", targetX, 573, "#8f99bf", "center");
+        smallCaps("COMBO", 1150, 410, "#e1eef5", "center");
+        text(g.combo, 1150, 458, 51, "#fff", "center", 900);
+        ctx.fillStyle = "rgba(255,255,255,.10)"; rounded(1084, 493, 132, 6, 3); ctx.fill();
+        ctx.fillStyle = UI.cyan; rounded(1084, 493, Math.min(132, 18 + g.combo * 2), 6, 3); ctx.fill();
       }
     }
 
     const progress = g.started ? clamp(Audio.time() / Math.max(1, song.duration), 0, 1) : 0;
-    ctx.fillStyle = "rgba(255,255,255,.07)"; ctx.fillRect(0, 709, W, 11);
-    ctx.fillStyle = gradient(song.colorA, song.colorB, 0, 709, W, 11); ctx.fillRect(0, 709, W * progress, 11);
-    text("SPACE / TAP", W / 2, 665, 13, "#8f99bf", "center", 800);
-    text("ESC PAUSE", 1232, 675, 10, "#687092", "right", 750);
+    ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fillRect(0, 712, W, 8);
+    ctx.fillStyle = gradient(UI.cyan, UI.pinkHot, 0, 712, W, 8); ctx.fillRect(0, 712, W * progress, 8);
+    smallCaps("D  F  J  K", W / 2, 685, "#dbe8ef", "center");
+    smallCaps("ESC PAUSE", 1242, 687, "#778999", "right");
 
     if (g.paused) drawPause();
   }
@@ -1664,13 +1832,27 @@
     app.pointer.y = ((event.clientY - rect.top) - app.oy) / app.scale;
   }
 
+  function laneForCode(code) {
+    return GAME_LANES.findIndex(lane => lane.codes.includes(code));
+  }
+
   canvas.addEventListener("pointermove", pointerPosition);
   canvas.addEventListener("pointerdown", event => {
     pointerPosition(event);
     app.pointer.down = true;
     Audio.ensure();
     if (app.screen === "title") { setScreen("main"); return; }
-    if (app.screen === "play" && app.game && !app.game.paused) { hitBeat(); return; }
+    if (app.screen === "play" && app.game && !app.game.paused) {
+      for (let i = app.buttons.length - 1; i >= 0; i--) {
+        const b = app.buttons[i];
+        if (!b.disabled && pointIn(app.pointer.x, app.pointer.y, b)) { b.action(); return; }
+      }
+      if (app.pointer.y >= 180 && app.pointer.x >= 180 && app.pointer.x <= 1100) {
+        const lane = clamp(Math.floor((app.pointer.x - 258) / ((1022 - 258) / 4)), 0, 3);
+        hitLane(lane);
+      }
+      return;
+    }
     if (app.screen === "editor" && app.waveformRect && pointIn(app.pointer.x, app.pointer.y, app.waveformRect)) {
       const p = clamp((app.pointer.x - app.waveformRect.x) / app.waveformRect.w, 0, 1);
       Audio.seek(p * app.editor.song.duration); return;
@@ -1684,7 +1866,7 @@
   canvas.addEventListener("contextmenu", e => e.preventDefault());
 
   window.addEventListener("keydown", event => {
-    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) event.preventDefault();
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "KeyD", "KeyF", "KeyJ", "KeyK"].includes(event.code)) event.preventDefault();
     Audio.ensure();
 
     if (app.textField) {
@@ -1700,8 +1882,15 @@
     if (app.screen === "title") { if (["Space", "Enter"].includes(event.code)) setScreen("main"); return; }
     if (app.screen === "play") {
       if (event.code === "Escape") { pauseGame(); return; }
-      if (event.code === "Space" || event.code === "Enter") { if (app.game.paused) pauseGame(); else hitBeat(); }
-      if (app.game.paused) navigateButtons(event);
+      if (app.game.paused) { navigateButtons(event); return; }
+      const lane = laneForCode(event.code);
+      if (lane >= 0) {
+        if (!event.repeat) {
+          app.game.laneHeld[lane] = true;
+          hitLane(lane);
+        }
+        return;
+      }
       return;
     }
     if (app.screen === "editor") {
@@ -1748,6 +1937,12 @@
       return;
     }
     navigateButtons(event);
+  });
+
+  window.addEventListener("keyup", event => {
+    if (app.screen !== "play" || !app.game || !app.game.laneHeld) return;
+    const lane = laneForCode(event.code);
+    if (lane >= 0) app.game.laneHeld[lane] = false;
   });
 
   function navigateButtons(event) {

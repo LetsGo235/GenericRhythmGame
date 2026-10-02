@@ -80,7 +80,7 @@
     const bg = events.match(/^\s*(?:0|Background)\s*,\s*0\s*,\s*["']?([^,"']+)["']?/mi);
     if (bg) result.coverRef = bg[1].trim();
     const mode = valueAfter(general, "Mode") || "0";
-    result.warnings.push(mode === "3" ? "osu!mania lanes and simultaneous chords were collapsed to one button." : "Sliders and spinners were converted to a tap at their start time.");
+    result.warnings.push(mode === "3" ? "osu!mania timing is remapped across Pulse//Space's four lanes; simultaneous chords become one pulse." : "Sliders and spinners were converted to a tap at their start time.");
     return result;
   }
 
@@ -154,7 +154,7 @@
         const chartOffsetText = valueAfter(block, "#OFFSET", ":");
         const chartBeatToTime = makeBeatConverter(chartBpms.length ? chartBpms : bpms, chartOffsetText ? safeNumber(chartOffsetText, offset) : offset, chartStops.length ? chartStops : stops);
         result.beats = stepRowsToBeats(noteMatch[1], chartBeatToTime);
-        result.warnings.push("Dance lanes and chords were collapsed; holds and rolls become one starting tap. Mines are ignored.");
+        result.warnings.push("Dance timing is remapped across four lanes; chords, holds, and rolls become one starting tap. Mines are ignored.");
         if (result.beats.length) results.push(result);
       }
     } else {
@@ -170,7 +170,7 @@
         const result = baseCandidate("StepMania SM", fileName);
         Object.assign(result, { title, artist, audioRef, coverRef, bpm: baseBpm, difficultyName: label, difficulty: difficultyFromLabel(label, meter) });
         result.beats = stepRowsToBeats(noteData, beatToTime);
-        result.warnings.push("Dance lanes and chords were collapsed; holds and rolls become one starting tap. Mines are ignored.");
+        result.warnings.push("Dance timing is remapped across four lanes; chords, holds, and rolls become one starting tap. Mines are ignored.");
         if (result.beats.length) results.push(result);
       }
     }
@@ -196,7 +196,7 @@
     result.bpm = Math.round(safeNumber(bpmMatch && bpmMatch[1], 120));
     result.beats = dedupeBeats(Array.from(hitText.matchAll(/StartTime\s*:\s*([-\d.]+)/gi), match => safeNumber(match[1], -1) / 1000));
     result.difficulty = difficultyFromLabel(result.difficultyName, result.beats.length > 800 ? 5 : result.beats.length > 400 ? 4 : 2);
-    result.warnings.push("Quaver lanes and chords were collapsed; long notes become one starting tap.");
+    result.warnings.push("Quaver timing is remapped across four lanes; chords and long notes become one starting tap.");
     return result;
   }
 
@@ -228,7 +228,7 @@
       const result = baseCandidate("Clone Hero", fileName);
       Object.assign(result, { title, artist, audioRef, bpm: Math.round((bpmEvents[0] || { value: 120 }).value), difficultyName: name, difficulty: difficultyFromLabel(name, 3) });
       result.beats = dedupeBeats(ticks.map(tick => beatToTime(tick / resolution)));
-      result.warnings.push("Fret lanes, chords, sustains, forced notes, and star-power markers were flattened to one-button taps.");
+      result.warnings.push("Fret lanes are remapped across four lanes; chords, sustains, forced notes, and star-power markers become single taps.");
       results.push(result);
     }
     return results;
@@ -299,7 +299,7 @@
       const result = baseCandidate("Beat Saber", infoName);
       Object.assign(result, { title, artist, bpm: Math.round(bpm), audioRef, coverRef, difficultyName: map.difficulty, difficulty: difficultyFromLabel(map.difficulty, map.rank) });
       result.beats = dedupeBeats(noteBeats.map(beatToTime));
-      result.warnings.push("Saber colors, cut directions, lanes, walls, bombs, and simultaneous blocks were flattened to one-button taps.");
+      result.warnings.push("Saber notes are remapped across four lanes; cut directions, walls, bombs, and simultaneous blocks are simplified.");
       results.push(result);
     }
     return results;
